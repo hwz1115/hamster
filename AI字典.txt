@@ -1,0 +1,194 @@
+/**
+ * 元书输入法 · AI 字典查询 (多接口兼容版)
+ * 
+ * 用法：
+ *   在输入框输入、选中文字、或复制单字/词语/成语，点击脚本。
+ *   AI 会自动识别类型（单字、词语、成语）并按固定格式输出查询结果。
+ * 
+ * 输入来源（按优先级）：脚本输入框 $searchText → 键盘选中文本 $selectedText → 剪贴板 $pasteboardContent
+ * 
+ * 设置已改为自动读取「脚本变量管理」里的公共变量。
+ */
+
+// ============== 设置 ==============
+
+// 优先读取你在「脚本变量管理」里设置的公共变量，实现所有脚本共用配置
+const CONFIG = {
+    BASE_URL: (typeof $BASE_URL !== "undefined" && $BASE_URL) ? $BASE_URL : "https://api.deepseek.com/chat/completions",
+    MODEL: (typeof $MODEL !== "undefined" && $MODEL) ? $MODEL : "deepseek-chat",
+    TEMPERATURE: 0.1,
+    TOP_P: 0.1,
+    MAX_TOKENS: 2048,
+    TIMEOUT_SEC: 120,
+};
+
+// ============================================
+
+/**
+ * 判断输入类型（单字、词语、成语）
+ */
+function detectQueryType(text) {
+  if (!text) return "未知";
+  const clean = text.trim().replace(/[^\u4e00-\u9fa5]/g, "");
+  if (clean.length === 1) return "单字";
+  if (clean.length === 4) return "成语";
+  if (clean.length > 1) return "词语";
+  return "未知";
+}
+
+/**
+ * 构建 Prompt
+ */
+function buildPrompt(text, type) {
+  switch (type) {
+    case "单字":
+      return `请查询汉字「${text}」的详细信息，按以下格式返回：
+[拼音]：如果该汉字是多音字，请在拼音字段中显示所有读音，用逗号分隔，例如 "kàn,kān"
+[部首]：
+[总笔画]：
+[结构]：
+[近义词]：
+[反义词]：
+[异体字]：
+[基本解释]：
+请严格按照以上字段输出，不要增加额外文字。`;
+
+    case "词语":
+      return `请查询词语「${text}」的详细信息，按以下格式返回：
+[拼音]：
+[近义词]：
+[反义词]：
+[基本解释]：
+请严格按照以上字段输出。`;
+
+    case "成语":
+      return `请查询成语「${text}」的详细信息，按以下格式返回：
+[拼音]：
+[感情]：
+[近义词]：
+[反义词]：
+[出处]：
+[用法]：
+[基本解释]：
+请严格按照以上字段输出。`;
+
+    default:
+      return `请根据内容「${text}」提供详细解释。`;
+  }
+}
+
+/**
+ * 字典查询核心逻辑
+ * @param {string} message - 需要查询的文本
+ * @returns {Promise<string>} 查询结果文本
+ */
+async function queryDictionary(message) {
+    // 获取公共变量并清理空格
+    const apiKey = (typeof $free_deepseek_key !== "undefined" && $free_deepseek_key) ? $free_deepseek_key.trim() : "";
+    
+    if (!apiKey) {
+        throw new Error("API Key缺失。请检查脚本变量管理中的 free_deepseek_key 是否已设置。");
+    }
+
+    // 检测查询类型
+    const queryType = detectQueryType(message);
+    const prompt = buildPrompt(message, queryType);
+    
+    // 构建消息体
+    const messages = [
+        {
+            role: "system",
+            content: "你是一个专业的中文语言知识助手，擅长查询汉字、词语、成语等语言信息，请根据用户输入的类型输出规范格式结果。",
+        },
+        {
+            role: "user",
+            content: prompt,
+        },
+    ];
+
+    try {
+        const response = await $http({
+            url: CONFIG.BASE_URL.trim(),
+            method: "POST",
+            header: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${apiKey}`,
+                "User-Agent": "Dictionary-Query-Script/1.0"
+            },
+            body: {
+                model: CONFIG.MODEL.trim(),
+                messages: messages,
+                temperature: CONFIG.TEMPERATURE,
+                top_p: CONFIG.TOP_P,
+                max_tokens: CONFIG.MAX_TOKENS,
+                stream: false
+            },
+            timeout: CONFIG.TIMEOUT_SEC,
+        });
+
+        // 检查HTTP状态码
+        if (response.response.statusCode !== 200) {
+            let errorDetail = '无详情';
+            try {
+                const errorData = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+                errorDetail = errorData.error?.message || errorData.msg || JSON.stringify(errorData);
+            } catch (e) {
+                errorDetail = response.data || '无法解析的响应';
+            }
+            throw new Error(`API请求失败: HTTP状态码 ${response.response.statusCode}。详情: ${errorDetail}`);
+        }
+
+        // 解析响应数据
+        let responseData;
+        try {
+            responseData = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+        } catch (e) {
+            throw new Error("API返回的数据无法解析为JSON");
+        }
+
+        // 提取查询结果
+        const result = responseData.choices?.[0]?.message?.content?.trim();
+
+        if (!result) {
+            if (responseData.error) {
+                throw new Error(`API错误: ${responseData.error.message || '未知错误'}`);
+            }
+            throw new Error("API返回数据格式错误或查询内容为空");
+        }
+
+        // 添加查询类型标识
+        const typeLabel = `【${queryType}查询】${message}\n\n`;
+        return typeLabel + result;
+
+    } catch (error) {
+        const errorMessage = error.message || (error instanceof SyntaxError ? "API返回的数据无法解析为JSON" : "未知错误");
+        $log(`字典查询错误: ${errorMessage}`);
+        throw new Error(`字典查询失败: ${errorMessage}`);
+    }
+}
+
+/**
+ * 脚本的入口函数
+ */
+async function output() {
+    // 补全了选中文本的读取逻辑
+    const a = (typeof $searchText !== "undefined") ? $searchText : "";
+    const b = (typeof $selectedText !== "undefined") ? $selectedText : "";
+    const c = (typeof $pasteboardContent !== "undefined") ? $pasteboardContent : "";
+    const message = ((a && a.trim()) || (b && b.trim()) || (c && c.trim()) || "");
+
+    if (!message) {
+        return ["请输入要查询的汉字、词语或成语。"];
+    }
+
+    try {
+        const result = await queryDictionary(message.trim());
+        
+        // 按行分割，过滤空行
+        const lines = result.split("\n").filter(line => line.trim() !== "");
+        return lines.length > 0 ? lines : [result];
+
+    } catch (error) {
+        return [`抱歉，字典查询失败: ${error.message}`];
+    }
+}
