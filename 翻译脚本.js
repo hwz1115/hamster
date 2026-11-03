@@ -1,40 +1,14 @@
-// 版本：v1（2026-11-03）
+// 版本：v1.1（支持全变量读取）
 /**
  * 元书输入法 · 翻译脚本
- * 基于群里的《字节火山引擎翻译(2).js》整理修改，写法和 $http 的用法保持不变。
- *
- * 用法：
- *   在脚本面板的输入框里打字，点这个脚本。
- *   中文会翻成英文，其他语言会翻成中文。
- *   想翻成别的语言，在文字前面加一个字再空一格，例如「日 你好」：
- *   法=法语 日=日语 韩=韩语 德=德语 俄=俄语 西=西班牙语 意=意大利语 粤=粤语
- *
- * 输入来源（按优先级）：脚本输入框 $searchText → 键盘选中文本 $selectedText → 剪贴板 $pasteboardContent
- *   （读取剪贴板需要打开「访问系统剪贴板」开关）
- *
- * 要改的地方只有下面「设置」这一块。
  */
 
-// ============== 设置（只改这里）==============
-
-// 接口地址。
-// 用火山方舟：保持下面这行不变。
-// 用你自己的 OpenAI 格式接口：改成 https://你的域名/v1/chat/completions
-// var BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
-
-// 模型。
-// 火山方舟：填你自己创建的「接入点 ID」，形如 ep-xxxxxxxx-xxxxx
-// 自己的接口：填模型名，例如 deepseek-chat
-// var MODEL = "ep-请换成你自己的接入点ID";
-
-// 密钥。推荐在元书里设置环境变量 free_deepseek_key（和原脚本一致）。
-// 找不到环境变量的地方，也可以直接填在下面这一行引号里（注意别把脚本发给别人）。
-// var API_KEY_INLINE = "";
+// ============== 设置 ==============
 
 // 优先读取你在「脚本变量管理」里设置的变量，如果没有设置，则使用后面的备用值
 var BASE_URL = (typeof $BASE_URL !== "undefined" && $BASE_URL) ? $BASE_URL : "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
 var MODEL = (typeof $MODEL !== "undefined" && $MODEL) ? $MODEL : "ep-请换成你自己的接入点ID";
-var API_KEY_INLINE = ""; // 这里留空，密钥会从下面自动读取
+var API_KEY_INLINE = ""; // 建议留空，密钥通过 $free_deepseek_key 变量读取
 
 // ============================================
 
@@ -48,6 +22,7 @@ var LANGUAGE_MAP = {
 };
 
 function getKey() {
+    // 优先读取变量 $free_deepseek_key，如果没有则用 API_KEY_INLINE
     var envKey = (typeof $free_deepseek_key !== "undefined") ? $free_deepseek_key : "";
     return (envKey || API_KEY_INLINE || "").trim();
 }
@@ -73,7 +48,7 @@ async function translate(message) {
 
     var key = getKey();
     if (!key) {
-        throw new Error("没有找到密钥，请设置环境变量 free_deepseek_key，或填到脚本开头的 API_KEY_INLINE");
+        throw new Error("没有找到密钥，请检查脚本变量管理里的 free_deepseek_key，或填到脚本开头的 API_KEY_INLINE");
     }
 
     var messages = [
