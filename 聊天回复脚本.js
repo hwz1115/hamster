@@ -18,14 +18,20 @@
 // ============== 设置（只改这里）==============
 
 // 接口地址（和翻译脚本里的 BASE_URL 一样）
-var BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
+// var BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
 
 // 模型（和翻译脚本里的 MODEL 一样）
-var MODEL = "ep-请换成你自己的接入点ID";
+// var MODEL = "ep-请换成你自己的接入点ID";
 
 // 密钥：和翻译脚本一样，用环境变量 free_deepseek_key。
 // 没设置环境变量的话，可以填在下面引号里（注意别把脚本发给别人）。
-var API_KEY_INLINE = "";
+// var API_KEY_INLINE = "";
+
+
+// 自动读取「脚本变量管理」里的变量，实现所有脚本共用配置
+var BASE_URL = (typeof $BASE_URL !== "undefined" && $BASE_URL) ? $BASE_URL : "https://ark.cn-beijing.volces.com/api/v3/chat/completions";
+var MODEL = (typeof $MODEL !== "undefined" && $MODEL) ? $MODEL : "ep-请换成你自己的接入点ID";
+var API_KEY_INLINE = ""; 
 
 // ============================================
 
